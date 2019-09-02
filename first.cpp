@@ -68,13 +68,13 @@ void clean_str(char *str)
 {
 	if( str[strlen(str)-1]==' ' || str[strlen(str)-1]=='\n' )
 	{	
-		cout<<"after";
+		//cout<<"after";
 		str[strlen(str)-1]='\0';
 	}
 
 	if( str[0]==' ' || str[0]=='\n') 
 	{
-		cout<<"before";
+		//cout<<"before";
 		memmove(str, str+1, strlen(str));
 	}
 }
@@ -183,6 +183,221 @@ void redirect(char **para ,int count)
 	wait(NULL);
 }
 
+int count_pipes(char *buf)
+{
+	int c = 0;
+
+	for(int i=0 ;i<strlen(buf) ;i++)
+	{
+		if( buf[i] == '|' )
+		{
+			c++;
+		}
+	}
+
+	return c;
+}
+
+void piped(char **para ,int para_count ,int no_of_pipes)
+{
+	int fd1[2]; 
+    int fd2[2];
+
+    for(int i=0 ;i<para_count;i++)
+    {
+    	char *args[100];
+    	int argc;
+
+    	make_command(para[i] ,args ,&argc," ");
+
+    	if( i%2 == 0 )
+    	{
+    		pipe(fd2);
+    	}
+    	else
+    	{
+    		pipe(fd1);
+    	}
+
+    	int pid = fork();
+
+    	if(pid==-1)
+    	{			
+            if (i != para_count - 1)
+            {
+                if (i % 2 != 0)
+                {
+                    close(fd1[1]); 
+                }
+                else
+                {
+                    close(fd2[1]); 
+                } 
+            }			
+            printf("Child process could not be created\n");
+            return;
+        }
+
+    	if( pid == 0 )
+    	{
+    		if( i==0 )
+    		{
+    			dup2(fd2[1] ,STDOUT_FILENO);
+    		}
+    		else if( i==para_count-1)
+    		{
+    			if( para_count%2 != 0 )
+    			{
+    				dup2(fd1[0] ,STDIN_FILENO);
+    			}
+    			else
+    			{
+    				dup2(fd2[0] ,STDIN_FILENO);
+    			}
+    		}
+    		else
+    		{
+    			if( i%2 != 0 )
+    			{
+    				dup2(fd2[0] ,STDIN_FILENO);
+    				dup2(fd1[1] ,STDOUT_FILENO);
+    			}
+    			else
+    			{
+    				dup2(fd1[0] ,STDIN_FILENO);
+    				dup2(fd2[1] ,STDOUT_FILENO);
+
+    			}
+    		}
+
+    		execvp(args[0] ,args);
+    	}
+
+    	if( i==0 )
+    	{
+    		close(fd2[1]);
+    	}
+    	else if( i==para_count - 1 )
+    	{
+    		if( para_count%2 != 0 )
+    		{
+    			close(fd1[0]);
+    		}
+    		else
+    		{
+    			close(fd2[0]);
+    		}
+    	}
+    	else
+    	{
+    		if( i%2 != 0 )
+    		{
+    			close(fd2[0]);
+    			close(fd1[1]);
+    		}
+    		else
+    		{
+    			close(fd1[0]);
+    			close(fd2[1]);
+    		}
+    	}
+
+    	waitpid(pid,NULL,0);
+    }
+	/*--------------------------------------------------------------------------------
+	 int fd[2] ;
+
+	 if( pipe(fd) == -1 )
+	 {
+	 	cout<<"Pipe Error"<<endl;
+	 	return;
+	 }
+
+	 char *args1[100] ,*args2[100];
+	 int argc1 ,argc2;
+
+	 make_command(para[1] ,args1 ,&argc1," ");
+	 make_command(para[0] ,args2 ,&argc2," ");
+
+	 int pid2 = fork();
+	 //ls
+	 if( pid2 == 0 )
+	 {
+	 	close(fd[0]);
+
+	 	dup2(fd[1] ,1 );
+	 	close(fd[0]);
+	 	close(fd[1]);
+
+	 	execvp(args2[0] ,args2);
+	 }
+
+	 int pid1 = fork();
+	 //grep
+	 if( pid1 == 0 )
+	 {
+	 	close(fd[1]);
+	 	dup2( fd[0] ,0 );
+
+	 	close( fd[0]);
+	 	close( fd[1]);
+
+	 	execvp(args1[0],args1);
+	 }
+
+	 close(fd[0]);
+	 close(fd[1]);
+
+	  while (wait(NULL) > 0);
+    ------------------------------------------------------------------------------------------------*/
+
+	/*int fd[para_count][2],i ,pc;
+
+	for(i=0;i<para_count;i++)
+	{
+		char *args[100];
+	    int argc;
+		make_command(para[i],args,&argc," ");
+
+		if(i!=para_count-1){
+			if(pipe(fd[i])<0){
+				perror("pipe creating was not successfull\n");
+				return;
+			}
+		}
+		if(fork()==0)
+		{//child1
+			if(i!=para_count-1){
+				dup2(fd[i][1],1);
+				//close(fd[i][0]);
+				close(fd[i][1]);
+			}
+
+			if(i!=0)
+			{
+				dup2(fd[i-1][0],0);
+				close(fd[i-1][1]);
+				close(fd[i-1][0]);
+			}
+			
+			execvp(args[0],args);
+			perror("invalid Pipe ");
+			exit(1);//in case exec is not successfull, exit
+		}
+		//parent
+		if(i!=0)
+		{//second process
+			close(fd[i-1][0]);
+			close(fd[i-1][1]);
+		}
+		wait(NULL);
+	}
+	--------------------------------------------------------------------
+	*/
+
+
+}
+
 main()
 {
 	start_shell();
@@ -197,7 +412,15 @@ main()
 
 		fgets(buf,1000 ,stdin);
 
-		if( strstr(buf ,">>"))
+		if( strstr(buf ,"|"))
+		{
+			int pipes = count_pipes(buf);
+			cout<<" Pipes : "<<pipes<<endl;
+
+			make_command(buf ,args ,&argc ,"|");
+			piped(args ,argc ,pipes);
+		}
+		else if( strstr(buf ,">>"))
 		{
 			make_command(buf ,args ,&argc ,">>");
 
@@ -210,7 +433,7 @@ main()
 				cout<<"Redirection Error"<<endl;
 			}
 		}
-		if( strstr(buf ,">"))
+		else if( strstr(buf ,">"))
 		{
 			make_command(buf ,args ,&argc ,">>");
 
