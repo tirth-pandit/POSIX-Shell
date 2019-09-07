@@ -5,43 +5,210 @@
 #include<sys/types.h> 
 #include<sys/wait.h>
 #include<bits/stdc++.h>
-#include <unistd.h> 
-#include <fcntl.h> 
+#include<fcntl.h> 
+#include<time.h> 
+#include<fstream>
+#include <sstream>  
+#include <string>
+#include <termios.h>
+#include<dirent.h>
+#include "getinput.cpp"
 
 using namespace std;
 
 #define clear() printf("\033[H\033[J") 
 
+map<string ,string> m;
+map<string ,string> alias;
+map<string ,string> ext;
+
+trie *root = new trie();
+
+int e_code;
+int exit_code;
+
+
+vector<string> split (string s, string delimiter) 
+{
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    string token;
+    vector<string> res;
+
+    while ((pos_end = s.find (delimiter, pos_start)) != string::npos) 
+    {
+        token = s.substr (pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back (token);
+    }
+
+    res.push_back (s.substr (pos_start));
+    return res;
+}
+
 void start_shell()
 {
 	clear();
-
-
 	sleep(1);
 	clear();
 }
 
-void prompt()
+void write_rc()
 {
-   string shell;
-  
-   char pd[500] ;
-   getcwd(pd, sizeof(pd))	;
-   
-   char hostname[100];
-   char username[100];
+	string path = m["HOME"] + "/myrc.txt";
 
-   gethostname(hostname, 100);
-   getlogin_r(username, 100); 
+	ofstream ot;
+	ot.open(path);
 
-   cout<<username<<"@"<<hostname<<" :~ "<<pd<<" $ ";	
+	ot<<m["USER"]<<endl;
+	ot<<m["USERID"]<<endl;
+	ot<<m["HOME"]<<endl;
+	ot<<m["PATH"]<<endl;
+	ot<<m["PS1"]<<endl;
+
+	ot.close();
 }
 
-string  read_command()
+void read_env()
 {
-	string temp;
-	getline(cin,temp);
-	return temp;
+	ifstream in;
+
+	in.open("/etc/passwd");
+	string line;
+
+	int uid = getuid();
+
+	ostringstream str1; 
+  
+    str1 << uid;
+  
+    string u = str1.str(); 
+    
+    std::vector<string> res;
+
+	while(in)
+	{
+		getline(in ,line);
+
+		if( strstr(line.c_str() ,u.c_str()))
+		{
+			res = split(line ,":");
+			break;
+		}
+	}
+
+
+	m.insert(make_pair(string("USER") ,res[0]));
+	m.insert(make_pair(string("USERID") , res[2]));
+	m.insert(make_pair(string("HOME") ,res[5]));
+
+	in.close();
+
+	in.open("/etc/environment");
+	getline(in,line);
+
+	line = line.substr(6,line.size()-7);
+
+	cout<<line<<endl;
+
+	m.insert(make_pair(string("PATH") ,line));
+
+	char hn[1000];
+	gethostname(hn,1000);
+
+	m.insert(make_pair(string("PS1"),string("$")));
+}
+
+int find(string s)
+{
+	for(int i=0 ;i<s.size() ;i++)
+	{
+		if( s[i] == '=')
+		{
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+void read_rc()
+{
+	ifstream in;
+	char username[100];
+
+	getlogin_r(username, 100); 
+	
+	string path = "/home/" + string(username) + "/myrc.txt";
+
+	vector<string> v{"USER","USERID","HOME","PATH","PS1"};
+	
+	string line;
+
+	in.open(path);
+
+	int i=0;
+	while(i!=5)
+	{
+		getline(in ,line);
+		m.insert( make_pair(v[i] ,line));
+		i++;
+	}
+
+	vector<string> s;
+
+	while(1)
+	{
+		getline(in,line);
+		
+		if( find(line) == 0 )
+		{
+			break;
+		}
+
+		s = split(line ,"=");
+
+		if( s.size() != 2)
+		{
+			break;
+		}
+		//cout<<s.size()<<endl;
+		alias.insert(make_pair(s[0],s[1]));
+	}
+
+	while(in)
+	{
+		s = split(line," ");
+
+		cout<<s[0]<<" "<<s[1]<<endl;
+		ext.insert(make_pair(s[0],s[1]));
+
+		getline(in ,line);
+	}
+
+	in.close();
+
+}
+
+void make_rc()
+{
+	ifstream in;
+	char username[100];
+
+	getlogin_r(username, 100); 
+	
+	string path = "/home/" + string(username) + "/myrc.txt";
+
+	in.open(path);
+
+	if( in.good() == true )
+	{
+		read_rc();
+	}
+	else
+	{
+		read_env();
+		write_rc();
+	}
 }
 
 void execute_com(char **args)
@@ -51,18 +218,20 @@ void execute_com(char **args)
 	if ( pid == 0 ) 
 	{
 		execvp( args[0], args );
-		exit(1);
 	}
-	else if( pid > 0 )
-	{
-		wait(&pid);
-	}
-	else
-	{
-		cout<<"Process Can't be created "<<endl;
-	}
+
+	waitpid(pid ,&e_code ,0);
+
+	//if(WIFEXITED(e_code))
+	//{
+	exit_code =  WEXITSTATUS(e_code);
+	//}
 }
 
+void print_exit_status()
+{
+	cout<<exit_code<<endl;	
+}
 
 void clean_str(char *str)
 {
@@ -93,6 +262,7 @@ void make_command(char *buf ,char **args ,int *argc ,const char *del)
 
 		//cout<<args[count]<<" "<<strlen(args[count])<<endl;
 		clean_str(args[count]);
+
 		word = strtok(NULL,del);
 		count++;
 	}
@@ -111,9 +281,13 @@ void redirect_append(char **para ,int count)
 
 	clean_str(para[1]);
 	clean_str(para[0]);
-
-	cout<<para[1]<<" "<<strlen(para[1])<<endl;
+ 
 	make_command(para[0],args ,&para_count ," ");
+	if( alias.find( args[0]) != alias.end() )
+	{
+		string temp = alias[ args[0]];
+		strcpy(args[0] ,temp.c_str());
+	}
 
 	int pid = fork();
 
@@ -127,11 +301,6 @@ void redirect_append(char **para ,int count)
 			return;
 		}
 
-		
-		//A tricky use of dup2() system call: As in dup2(), in place of newfd any file descriptor can be put. 
-		//Below is a C implementation in which the file descriptor of Standard output (stdout) is used. 
-		//This will lead all the printf() statements to be written in the file referred by the old file descriptor.
-		
 		dup2(fd,1);
 
 		execvp(args[0] ,args);
@@ -152,8 +321,13 @@ void redirect(char **para ,int count)
 	clean_str(para[1]);
 	clean_str(para[0]);
 
-	cout<<para[1]<<" "<<strlen(para[1])<<endl;
 	make_command(para[0],args ,&para_count ," ");
+	
+	if( alias.find( args[0]) != alias.end() )
+	{
+		string temp = alias[ args[0]];
+		strcpy(args[0] ,temp.c_str());
+	}
 
 	int pid = fork();
 
@@ -166,12 +340,7 @@ void redirect(char **para ,int count)
 			cout<<"Cannot open file ";
 			return;
 		}
-
-		
-		//A tricky use of dup2() system call: As in dup2(), in place of newfd any file descriptor can be put. 
-		//Below is a C implementation in which the file descriptor of Standard output (stdout) is used. 
-		//This will lead all the printf() statements to be written in the file referred by the old file descriptor.
-		
+	
 		dup2(fd,1);
 
 		execvp(args[0] ,args);
@@ -209,6 +378,12 @@ void piped(char **para ,int para_count ,int no_of_pipes)
     	int argc;
 
     	make_command(para[i] ,args ,&argc," ");
+
+    	if( alias.find( args[0]) != alias.end() )
+		{
+			string temp = alias[ args[0]];
+			strcpy(args[0] ,temp.c_str());
+		}
 
     	if( i%2 == 0 )
     	{
@@ -304,119 +479,121 @@ void piped(char **para ,int para_count ,int no_of_pipes)
 
     	waitpid(pid,NULL,0);
     }
-	/*--------------------------------------------------------------------------------
-	 int fd[2] ;
 
-	 if( pipe(fd) == -1 )
-	 {
-	 	cout<<"Pipe Error"<<endl;
-	 	return;
-	 }
+}
 
-	 char *args1[100] ,*args2[100];
-	 int argc1 ,argc2;
+int populate_trie()
+{
+	vector<string> v = split(m["PATH"] ,":");
 
-	 make_command(para[1] ,args1 ,&argc1," ");
-	 make_command(para[0] ,args2 ,&argc2," ");
+  	for(int i=0 ; i<v.size() ;i++)
+  	{
+  		string path = v[i];
 
-	 int pid2 = fork();
-	 //ls
-	 if( pid2 == 0 )
-	 {
-	 	close(fd[0]);
+  		struct dirent *d;
 
-	 	dup2(fd[1] ,1 );
-	 	close(fd[0]);
-	 	close(fd[1]);
+  		DIR *dir = opendir(path.c_str());
 
-	 	execvp(args2[0] ,args2);
-	 }
+  		if( dir == NULL )
+  		{
+  			cout<<"Error in opening :"<<endl;
+  			return 0;
+  		}
 
-	 int pid1 = fork();
-	 //grep
-	 if( pid1 == 0 )
-	 {
-	 	close(fd[1]);
-	 	dup2( fd[0] ,0 );
+  		while( (d = readdir(dir)) != NULL )
+  		{
+  			//cout<<d->d_name<<" "<<endl;
+  			root->insert(string(d->d_name));
+  		}
+  		
+  	}
+}
 
-	 	close( fd[0]);
-	 	close( fd[1]);
+void replace_home(char *buf)
+{
+	string home = m["HOME"];
+	int i=0;
 
-	 	execvp(args1[0],args1);
-	 }
+	char res[1000];
 
-	 close(fd[0]);
-	 close(fd[1]);
-
-	  while (wait(NULL) > 0);
-    ------------------------------------------------------------------------------------------------*/
-
-	/*int fd[para_count][2],i ,pc;
-
-	for(i=0;i<para_count;i++)
+	while( buf[i] != '~')
 	{
-		char *args[100];
-	    int argc;
-		make_command(para[i],args,&argc," ");
-
-		if(i!=para_count-1){
-			if(pipe(fd[i])<0){
-				perror("pipe creating was not successfull\n");
-				return;
-			}
-		}
-		if(fork()==0)
-		{//child1
-			if(i!=para_count-1){
-				dup2(fd[i][1],1);
-				//close(fd[i][0]);
-				close(fd[i][1]);
-			}
-
-			if(i!=0)
-			{
-				dup2(fd[i-1][0],0);
-				close(fd[i-1][1]);
-				close(fd[i-1][0]);
-			}
-			
-			execvp(args[0],args);
-			perror("invalid Pipe ");
-			exit(1);//in case exec is not successfull, exit
-		}
-		//parent
-		if(i!=0)
-		{//second process
-			close(fd[i-1][0]);
-			close(fd[i-1][1]);
-		}
-		wait(NULL);
+		res[i] = buf[i];
+		i++;
 	}
-	--------------------------------------------------------------------
-	*/
 
+	int temp = i+1;
 
+	int j=0;
+
+	while(j<home.size())
+	{
+		res[i++] = home[j++];
+	}
+
+	while(buf[temp] != '\0')
+	{
+		res[i++] = buf[temp++]; 
+	}
+
+	strcpy(buf ,res);
+}
+
+void change_ps1(string buf)
+{
+	vector<string> v = split(buf,"=");
+	m["PS1"] = v[1];
 }
 
 main()
 {
-	start_shell();
+	make_rc();
 
+	populate_trie();
+
+	start_shell();
 	char buf[1000] ;
 	char *args[100] ;
 	int argc =0;
 
 	while(1)
 	{
-		prompt();
+		string ps = m["PS1"] + " :";
 
-		fgets(buf,1000 ,stdin);
+		struct termios initial_state = ena();
+		sendinput(root ,buf,ps);
+		dis(initial_state);
 
-		if( strstr(buf ,"|"))
+		if( strstr(buf ,"~"));
+		{
+			replace_home(buf);
+		}
+
+		if( strstr(buf ,"$?"))
+		{
+			print_exit_status();
+		}
+		/*else if( strstr(buf ,"open"))
+		{
+			make_command(buf ,args ,&argc ," ");
+		
+			char temp[1000];
+
+			strcpy(temp ,args[1]);
+			cout<<temp;
+		}*/
+		else if( strstr(buf ,"PS1"))
+		{
+			change_ps1(string(buf));
+		}
+		else if( strstr(buf ,"$$") )
+		{
+			cout<<getpid()<<endl;
+		}
+		else if( strstr(buf ,"|"))
 		{
 			int pipes = count_pipes(buf);
-			cout<<" Pipes : "<<pipes<<endl;
-
+	
 			make_command(buf ,args ,&argc ,"|");
 			piped(args ,argc ,pipes);
 		}
@@ -424,7 +601,7 @@ main()
 		{
 			make_command(buf ,args ,&argc ,">>");
 
-			if( argc == 2 )
+				if( argc == 2 )
 			{
 				redirect_append(args ,argc );
 			}
@@ -446,13 +623,40 @@ main()
 				cout<<"Redirection Error"<<endl;
 			}
 		}
+		else if( strstr(buf ,"alias"))
+		{
+			char *al[100];
+			int c;
+			make_command(buf ,args ,&argc ," ");
+
+			make_command(args[1] ,al,&c,"=");
+
+			alias.insert( make_pair(al[0] ,al[1]));
+
+		}
 		else
 		{
 			make_command(buf ,args ,&argc ," ");
-        
+
+			if( alias.find( args[0]) != alias.end() )
+			{
+				string temp = alias[ args[0]];
+				strcpy(args[0] ,temp.c_str());
+			}
+
+
 			if( strcmp(args[0],"cd") == 0 )
 			{
 				chdir(args[1]);
+			}
+			else if( strcmp(args[0] ,"echo") == 0 )
+			{
+				if( strcmp(args[1],"$PATH") == 0 )
+				{
+					cout<<m["PATH"];
+				}
+
+				execute_com(args);
 			}
 			else
 			{
