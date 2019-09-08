@@ -9,9 +9,12 @@
 #include<time.h> 
 #include<fstream>
 #include <sstream>  
+#include <time.h> 
+#include <chrono>
 #include <string>
 #include <termios.h>
 #include<dirent.h>
+#include <typeinfo>
 #include "getinput.cpp"
 
 using namespace std;
@@ -27,6 +30,10 @@ trie *root = new trie();
 int e_code;
 int exit_code;
 
+string script_file;
+int scr_flag = 0;
+
+vector<long long int> alarms;
 
 vector<string> split (string s, string delimiter) 
 {
@@ -210,21 +217,61 @@ void make_rc()
 	}
 }
 
-void execute_com(char **args)
+void execute_com(char **args ,char *buf)
 {
+	
 	int pid = fork();
 
 	if ( pid == 0 ) 
 	{
+		if( scr_flag == 1 )
+		{
+			ofstream out;
+			out.open(script_file ,ofstream::app);
+
+			out<<m["PS1"]<<" :"<<buf<<endl;	
+
+			out.close();
+		
+			int fd = open("temp.txt", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+			if( fd < 0 )
+			{
+				write(STDOUT_FILENO ,"FAILED" ,6);
+				//return;
+			}
+
+			write(STDOUT_FILENO ,"HELLO" ,5);
+			dup2(fd ,STDOUT_FILENO);
+		}	
+
 		execvp( args[0], args );
 	}
 
 	waitpid(pid ,&e_code ,0);
-
-	//if(WIFEXITED(e_code))
-	//{
 	exit_code =  WEXITSTATUS(e_code);
-	//}
+
+	if( scr_flag == 1 )
+	{
+		ifstream in;
+		in.open("temp.txt");
+
+		ofstream out;
+		out.open(script_file,ofstream::app);
+
+		string line;
+
+		while( in )
+		{
+			getline(in ,line);
+
+			out<<line<<endl;
+			
+			cout<<line<<endl;
+		}
+
+		remove("temp.txt");
+	}
 }
 
 void print_exit_status()
@@ -292,7 +339,7 @@ void redirect_append(char **para ,int count)
 
 	if( pid == 0 )
 	{
-		int fd = open(para[1] ,O_CREAT || O_WRONLY || O_APPEND );
+		int fd = open(para[1] ,O_CREAT | O_RDWR | O_APPEND ,S_IRWXU );
 
 		if( fd < 0 )
 		{
@@ -332,7 +379,7 @@ void redirect(char **para ,int count)
 
 	if( pid == 0 )
 	{
-		int fd = open(para[1] ,O_CREAT | O_WRONLY);
+		int fd = open(para[1] ,O_CREAT | O_WRONLY ,S_IRWXU);
 
 		if( fd < 0 )
 		{
@@ -544,24 +591,122 @@ void change_ps1(string buf)
 	m["PS1"] = v[1];
 }
 
+void show_history()
+{
+	ifstream in;
+	in.open("history.txt");
+
+	string line;
+
+	int count = 1;
+
+	while(in)
+	{
+		getline(in ,line);
+
+		auto c = std::to_string(count);
+		c += ". ";
+		write(STDOUT_FILENO ,c.c_str() ,c.size());		
+		write(STDOUT_FILENO ,line.c_str() ,line.size());
+		write(STDOUT_FILENO ,"\n" ,1);
+
+		count++;
+	}
+
+	in.close();
+}
+
+void creat_alarm(int t)
+{
+    //alarms.push_back(t);
+
+    //time_t seconds = time(NULL);
+
+    //long long int x = static_cast<int>(seconds);
+
+    //x =x +t;
+    
+    //alarms.push_back(x);
+
+    int pid = fork();
+
+    if( pid == 0 )
+    {
+    	
+    	while(t>0)
+    	{
+    		sleep(1);
+    		t--;
+    	}
+
+		cout<<"Alarm Notification"<<endl;
+		exit(0);
+    }
+
+    /*std::vector<long long int>::iterator it;
+
+    for(it=alarms.begin() ;it<=alarms.end() ;it++)
+    {
+    	if( *it == x )
+    	{
+    		alarms.erase(it);
+    	}
+    }*/
+
+}
+
+/*void invoke_alarms()
+{
+	ifstream in;
+	in.open("alarms");
+
+	while(in)
+	{
+		long long int x;
+		in>>x;
+
+		time_t seconds = time(NULL);
+    
+	    long long int cur = static_cast<int>(seconds);
+
+	    if( cur > x )
+	    {
+	    	cout<<"Missed"<<endl;
+	    }
+	}
+}*/
+
 main()
 {
 	make_rc();
 
 	populate_trie();
 
+	//invoke_alarms();
+
 	start_shell();
 	char buf[1000] ;
 	char *args[100] ;
 	int argc =0;
 
+	ofstream out;
+	out.open("history.txt",ofstream::app);
+
+	char u[100];
+
+	getlogin_r(u,100);
+
+
 	while(1)
 	{
-		string ps = m["PS1"] + " :";
+
+		string ps = m["PS1"] + string(u) + " :";
 
 		struct termios initial_state = ena();
 		sendinput(root ,buf,ps);
 		dis(initial_state);
+
+		out<<buf<<endl;
 
 		if( strstr(buf ,"~"));
 		{
@@ -591,20 +736,6 @@ main()
 			make_command(buf ,args ,&argc ,"|");
 			piped(args ,argc ,pipes);
 		}
-		else if( strstr(buf ,">>"))
-		{
-
-			make_command(buf ,args ,&argc ,">>");
-
-				if( argc == 2 )
-			{
-				redirect_append(args ,argc );
-			}
-			else
-			{
-				cout<<"Redirection Error"<<endl;
-			}
-		}
 		else if( strstr(buf ,">"))
 		{
 			
@@ -613,6 +744,20 @@ main()
 			if( argc == 2 )
 			{
 				redirect(args ,argc);
+			}
+			else
+			{
+				cout<<"Redirection Error"<<endl;
+			}
+		}
+		else if( strstr(buf ,">>"))
+		{
+
+			make_command(buf ,args ,&argc ,">>");
+
+				if( argc == 2 )
+			{
+				redirect_append(args ,argc );
 			}
 			else
 			{
@@ -656,7 +801,55 @@ main()
 
 			comm[2] = NULL;
 
-			execute_com(comm);
+			execute_com(comm,buf);
+		}
+		else if( strstr(buf ,"history"))
+		{
+			show_history();
+		}
+		else if( strstr(buf ,"script"))
+		{
+			write(STDOUT_FILENO ,"Script Started\n",15);
+			make_command(buf, args ,&argc ," ");
+
+			script_file = args[1];
+			scr_flag = 1;
+		}
+		else if( strstr(buf ,"end"))
+		{
+			scr_flag = 0;
+			write(STDOUT_FILENO ,"Script ended\n",13);			
+		}
+		else if( strstr(buf ,"exit"))
+		{/*
+			ofstream out;
+			out.open("alarms");
+
+			for(int i=0 ;i<alarms.size() ;i++)
+			{
+				out<<alarms[i]<<endl;
+			}*/
+
+			return 0;
+		}
+		else if( strstr(buf ,"alarm"))
+		{
+			make_command(buf,args ,&argc," ");
+
+    		char temp[100];
+    		strcpy(temp ,args[1]);
+
+    		int val = 0;
+
+    		for(int i=0 ;i<strlen(temp) ;i++)
+    		{
+    			val = val*10 + ( temp[i] - '0');
+    		}
+
+			//cout<<val<<endl;
+
+			creat_alarm(val);
+			
 		}
 		else
 		{
@@ -681,11 +874,11 @@ main()
 					cout<<m["PATH"];
 				}
 
-				execute_com(args);
+				execute_com(args ,buf);
 			}
 			else
 			{
-				execute_com(args);
+				execute_com(args ,buf);
 			}
 		}
 	}
