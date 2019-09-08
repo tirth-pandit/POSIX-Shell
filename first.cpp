@@ -179,7 +179,6 @@ void read_rc()
 	{
 		s = split(line," ");
 
-		cout<<s[0]<<" "<<s[1]<<endl;
 		ext.insert(make_pair(s[0],s[1]));
 
 		getline(in ,line);
@@ -571,27 +570,22 @@ main()
 
 		if( strstr(buf ,"$?"))
 		{
+			
 			print_exit_status();
 		}
-		/*else if( strstr(buf ,"open"))
-		{
-			make_command(buf ,args ,&argc ," ");
-		
-			char temp[1000];
-
-			strcpy(temp ,args[1]);
-			cout<<temp;
-		}*/
 		else if( strstr(buf ,"PS1"))
 		{
+			
 			change_ps1(string(buf));
 		}
 		else if( strstr(buf ,"$$") )
 		{
+			
 			cout<<getpid()<<endl;
 		}
 		else if( strstr(buf ,"|"))
 		{
+			
 			int pipes = count_pipes(buf);
 	
 			make_command(buf ,args ,&argc ,"|");
@@ -599,6 +593,7 @@ main()
 		}
 		else if( strstr(buf ,">>"))
 		{
+
 			make_command(buf ,args ,&argc ,">>");
 
 				if( argc == 2 )
@@ -612,6 +607,7 @@ main()
 		}
 		else if( strstr(buf ,">"))
 		{
+			
 			make_command(buf ,args ,&argc ,">>");
 
 			if( argc == 2 )
@@ -625,6 +621,7 @@ main()
 		}
 		else if( strstr(buf ,"alias"))
 		{
+			
 			char *al[100];
 			int c;
 			make_command(buf ,args ,&argc ," ");
@@ -634,8 +631,36 @@ main()
 			alias.insert( make_pair(al[0] ,al[1]));
 
 		}
+		else if( strstr(buf ,"run"))
+		{
+			vector<string> v = split(string(buf) ," ");
+
+			vector<string> s = split(v[1] ,".");
+
+			string temp = ext[s[1]];
+	
+
+			char *comm[3];
+
+			char b[100];
+
+			strcpy(b ,temp.c_str());
+			clean_str(b);
+			comm[0] = b;
+
+			char c[100];
+			strcpy(c ,v[1].c_str());
+			clean_str(c);
+
+			comm[1] = c;
+
+			comm[2] = NULL;
+
+			execute_com(comm);
+		}
 		else
 		{
+			
 			make_command(buf ,args ,&argc ," ");
 
 			if( alias.find( args[0]) != alias.end() )
