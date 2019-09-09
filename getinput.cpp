@@ -14,13 +14,13 @@ using namespace std;
 #define DEL (127)
 #define ASCII_ESC 27
 
-void show(trie *root ,char* buffer,int top_buffer,string display)
+void show(trie *root ,char* buffer,int top,string msg)
 {
   cout<<endl;
   root->print_subtree(string(buffer));
 
-	write(STDOUT_FILENO, display.c_str(),display.size());
-	write(STDOUT_FILENO,buffer,top_buffer);
+	write(STDOUT_FILENO, msg.c_str(),msg.size());
+	write(STDOUT_FILENO,buffer,top);
 }
 
 void dis(struct termios initial_state) 
