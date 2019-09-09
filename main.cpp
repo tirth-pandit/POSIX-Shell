@@ -551,7 +551,7 @@ int populate_trie()
 
   		while( (d = readdir(dir)) != NULL )
   		{
-  			cout<<d->d_name<<" "<<endl;
+  			//cout<<d->d_name<<" "<<endl;
   			root->insert(string(d->d_name));
   		}
   		
