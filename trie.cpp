@@ -69,9 +69,6 @@ class trie
 
 			for(it=trav->m.begin() ;it!=trav->m.end() ;it++)
 			{
-				//cout<<endl<<it->first<<endl;
-				
-	
 				print_all( trav->m[it->first], k + it->first);
 			}
 		}
@@ -119,50 +116,3 @@ class trie
 
 		}
 };
-
-/*main()
-{
-    trie *root = new trie(); 
-  
-  	vector<string> v = {"/usr/local/sbin" ,"/usr/local/bin" ,"/usr/sbin" ,"/usr/bin" ,"/sbin" ,"/bin" ,"/usr/games" ,"/usr/local/games"};
-
-  	for(int i=0 ; i<v.size() ;i++)
-  	{
-  		string path = v[i];
-
-  		struct dirent *d;
-
-  		DIR *dir = opendir(path.c_str());
-
-  		if( dir == NULL )
-  		{
-  			cout<<"Error in opening :"<<endl;
-  			return 0;
-  		} 
-
-  		while( (d = readdir(dir)) != NULL )
-  		{
-  			cout<<d->d_name<<" "<<endl;
-  			root->insert(string(d->d_name));
-  		}
-  		
-  	}
-
-    //trie* root = new trie();
-
-    root->insert("hello"); 
-    root->insert("dog"); 
-    root->insert("hell"); 
-    root->insert("cat"); 
-    root->insert("a"); 
-    root->insert("hel"); 
-    root->insert("help"); 
-    root->insert("helps"); 
-    root->insert("helping"); 
-    
-    cout<<root->search("hell");
-    root->print_subtree("he"); 
-
-  	
-    return 0; 
-}*/
